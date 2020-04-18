@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <getopt.h>
+#include "elfio.h"
 
 static void print_help(void)
 {
@@ -10,7 +11,7 @@ static void print_help(void)
         "drow [-options] elffile\n"
         "options:\n"
         "  -a         Analyze ELF and display segment information and available space\n"
-        "  -s file    Stuff a blob in available space\n"
+        "  -s file    Stuff a payload blob in available space\n"
     );
 }
 
@@ -19,6 +20,8 @@ int main(int argc, char **argv)
     int opt;
     char *elffile = NULL;
     bool verbose = false;
+    bool rv;
+    drow_ctx_t *ctx;
 
     if (argc < 2) {
         print_help();
@@ -50,7 +53,7 @@ int main(int argc, char **argv)
                 return 1;
             }
 
-            elffile = optarg;
+            elffile = argv[optind];
             optind++;
         }
     }
@@ -60,5 +63,10 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    rv = load_elf(&ctx, elffile);
+    if (rv == false)
+        return 1;
+
+    unload_elf(ctx);
     return 0;
 }
