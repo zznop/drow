@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <getopt.h>
 #include "elfio.h"
+#include "parse.h"
 
 static void print_help(void)
 {
@@ -20,6 +21,7 @@ int main(int argc, char **argv)
     int opt;
     char *elffile = NULL;
     bool verbose = false;
+    bool analyze = true;
     bool rv;
     drow_ctx_t *ctx;
 
@@ -29,17 +31,15 @@ int main(int argc, char **argv)
     }
 
     while (optind < argc) {
-        if ((opt = getopt(argc, argv, "has:v")) != -1) {
+        if ((opt = getopt(argc, argv, "hs:v")) != -1) {
             switch (opt) {
             case 'h':
                 print_help();
                 return 0;
-            case 'a':
-                printf("Not implemented\n");
-                break;
             case 's':
                 printf("Not implemented\n");
-                break;
+                analyze = false;
+                return 1;
             case 'v':
                 verbose = true;
                 break;
@@ -67,6 +67,9 @@ int main(int argc, char **argv)
     if (rv == false)
         return 1;
 
+    if (analyze)
+        rv = analyze_elf_sections(ctx);
+
     unload_elf(ctx);
-    return 0;
+    return (rv == false);
 }
