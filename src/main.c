@@ -4,6 +4,7 @@
 #include <getopt.h>
 #include "elfio.h"
 #include "parse.h"
+#include "slackinfo.h"
 
 static void print_help(void)
 {
@@ -23,6 +24,7 @@ int main(int argc, char **argv)
     bool verbose = false;
     bool analyze = true;
     bool rv;
+    struct slackinfo *sinfo = NULL;
     drow_ctx_t *ctx;
 
     if (argc < 2) {
@@ -42,6 +44,7 @@ int main(int argc, char **argv)
                 return 1;
             case 'v':
                 verbose = true;
+                (void)verbose;
                 break;
             default:
                 print_help();
@@ -68,8 +71,13 @@ int main(int argc, char **argv)
         return 1;
 
     if (analyze)
-        rv = analyze_elf_sections(ctx);
+        rv = find_slackspace(ctx, &sinfo);
 
+    /* Cleanup */
+    printf("Cleaning up..\n");
+    if (sinfo)
+        free_slackinfo_list(sinfo);
     unload_elf(ctx);
+
     return (rv == false);
 }
