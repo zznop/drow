@@ -13,6 +13,6 @@
  * @param sinfo Output linked list of slack space information
  * @return true for success, false for failure
  */
-bool find_slackspace(drow_ctx_t *ctx, struct slackinfo **sinfo);
+bool parse_section_headers(drow_ctx_t *ctx, struct slackinfo **sinfo);
 
 #endif
