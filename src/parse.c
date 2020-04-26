@@ -16,7 +16,7 @@ bool _is_elf64(void *elf) {
     return false;
 }
 
-bool find_slackspace(drow_ctx_t *ctx, struct slackinfo **sinfo)
+bool parse_section_headers(drow_ctx_t *ctx, struct slackinfo **sinfo)
 {
     Elf64_Ehdr *ehdr;
     Elf64_Shdr *shtable;
@@ -42,37 +42,35 @@ bool find_slackspace(drow_ctx_t *ctx, struct slackinfo **sinfo)
     shstr = (char *)((uintptr_t)ctx->elf + shtable[ehdr->e_shstrndx].sh_offset);
 
     /* Initialize linked list */
-    curr = (struct slackinfo *)malloc(sizeof(*curr));
+    curr = (struct slackinfo *)calloc(sizeof(*curr), 1);
     if (!curr) {
         fprintf(stderr, "Out of memory!?\n");
         return false;
     }
     *sinfo = curr;
 
-    for (i = 0; i < ehdr->e_shnum; i++) {
-        /* Display generic section information */
-        printf("%s\n", shstr + shtable[i].sh_name);
-        printf("  -- offset      : %08x\n", (uint32_t)shtable[i].sh_offset);
-        printf("  -- addr        : %08x\n", (uint32_t)shtable[i].sh_addr);
-        printf("  -- size        : %08x\n", (uint32_t)shtable[i].sh_size);
-
+    for (i = 0;; i++) {
+        strncpy(curr->name, shstr+shtable[i].sh_name, MAX_SH_NAMELEN);
         curr->offset = (uint32_t *)&shtable[i].sh_offset;
         curr->size   = (uint32_t *)&shtable[i].sh_size;
-        if (i == ehdr->e_shnum) {
+        if (shtable[i].sh_flags & SHF_EXECINSTR)
+            curr->is_exec = true;
+        else
+            curr->is_exec = false;
+
+        if (i == ehdr->e_shnum-1) {
             curr->slackspace = 0; // Last section
             curr->next = NULL;
-            printf("  -- slack space : %i bytes\n", slackspace);
             break;
         } else {
             slackspace = shtable[i+1].sh_addr - shtable[i].sh_addr;
-            printf("  -- slack space : %i bytes\n", slackspace);
             curr->slackspace = slackspace;
         }
 
         curr->slackspace  = slackspace;
 
         /* Initialize next */
-        curr->next = (struct slackinfo *)malloc(sizeof(*curr));
+        curr->next = (struct slackinfo *)calloc(sizeof(*curr), 1);
         if (!curr) {
             fprintf(stderr, "Out of memory!?\n");
             return false;
