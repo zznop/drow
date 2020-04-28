@@ -115,7 +115,7 @@ int main(int argc, char **argv)
         goto done;
 
     /* Expand the section by name */
-    rv = expand_section_by_name(sinfo, ".text", &pinfo);
+    rv = expand_section_by_name(ctx, sinfo, ".text", &pinfo);
     if (rv == false)
         goto done;
 

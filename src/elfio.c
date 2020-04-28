@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdbool.h>
+#include <elf.h>
 #include "elfio.h"
 #include "slackinfo.h"
 #include "drow.h"
@@ -76,8 +77,9 @@ void unload_elf(drow_ctx_t *ctx)
         close(ctx->fd);
 }
 
-bool expand_section_by_name(struct slackinfo *sinfo, char *section_name, struct patchinfo *pinfo)
+bool expand_section_by_name(drow_ctx_t *ctx, struct slackinfo *sinfo, char *section_name, struct patchinfo *pinfo)
 {
+    Elf64_Ehdr *ehdr;
     struct slackinfo *curr;
     size_t adjust;
     size_t size;
@@ -122,6 +124,34 @@ bool expand_section_by_name(struct slackinfo *sinfo, char *section_name, struct 
         *curr->offset = newoff;
         curr = curr->next;
     }
+
+    printf(INFO "Fixing ELF header ...\n");
+    ehdr = (Elf64_Ehdr *)ctx->elf;
+    if (ehdr->e_shoff > pinfo->base)
+        ehdr->e_shoff = ehdr->e_shoff + pinfo->size;
+
+    if (ehdr->e_phoff > pinfo->base)
+        ehdr->e_phoff = ehdr->e_phoff + pinfo->size;
+
+    printf(INFO "Fixing program headers ...\n");
+    Elf64_Phdr *phdr = (Elf64_Phdr *)((uintptr_t)ctx->elf + ehdr->e_phoff);
+    size_t i;
+    for (i = 0; i < ehdr->e_phnum; i++) {
+        printf("Derp: %lu\n", i);
+        if (phdr[i].p_offset > pinfo->base) {
+            phdr[i].p_offset = phdr[i].p_offset + pinfo->size;
+        }
+
+        if (phdr[i].p_flags & PF_X) {
+            phdr[i].p_filesz += pinfo->size;
+            phdr[i].p_memsz += pinfo->size;
+        }
+
+        if (phdr[i].p_type == PT_DYNAMIC) {
+
+        }
+    }
+
 
     return true;
 }
