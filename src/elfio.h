@@ -34,7 +34,7 @@ void unload_elf(drow_ctx_t *ctx);
  * @param pinfo Output patch information
  * @return true for success, false for failure
  */
-bool expand_section_by_name(struct slackinfo *sinfo, char *section_name, struct patchinfo *pinfo);
+bool expand_section_by_name(drow_ctx_t *ctx, struct slackinfo *sinfo, char *section_name, struct patchinfo *pinfo);
 
 /**
  * Export fixed up ELF file
