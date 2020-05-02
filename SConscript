@@ -3,8 +3,6 @@ Import('env')
 sources = [
     './src/main.c',
     './src/elfio.c',
-    './src/slackinfo.c',
-    './src/parse.c',
 ]
 
 objs = env.Object(
