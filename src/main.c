@@ -3,8 +3,6 @@
 #include <stdbool.h>
 #include <getopt.h>
 #include "elfio.h"
-#include "parse.h"
-#include "slackinfo.h"
 #include "drow.h"
 
 static void print_help(void)
@@ -19,26 +17,6 @@ static void print_help(void)
     );
 }
 
-static void display_injectable(struct slackinfo *sinfo)
-{
-    struct slackinfo *curr = sinfo;
-    printf(INFO "Finding injectable sections ...\n");
-    while (curr != NULL) {
-        if (!curr->is_exec || !curr->slackspace) {
-            curr = curr->next;
-            continue;
-        }
-
-        /* Display generic section information */
-        printf("  -- %s\n", curr->name);
-        printf("    -- offset      : 0x%08x\n", *curr->offset);
-        printf("    -- size        : 0x%08x\n", *curr->size);
-        printf("    -- slack space : %lu bytes\n", curr->slackspace);
-        curr = curr->next;
-    }
-    printf("\n");
-}
-
 int main(int argc, char **argv)
 {
     int opt;
@@ -47,7 +25,7 @@ int main(int argc, char **argv)
     bool verbose = false;
     bool analyze = true;
     bool rv;
-    struct slackinfo *sinfo = NULL;
+    struct shinfo *sinfo = NULL;
     struct patchinfo pinfo = {0};
     drow_ctx_t *ctx;
 
@@ -102,20 +80,23 @@ int main(int argc, char **argv)
     if (rv == false)
         return 1;
 
-    /* Parse section headers */
-    rv = parse_section_headers(ctx, &sinfo);
-    if (rv == false)
+    printf(INFO "Finding last section in executable segment ...\n");
+    sinfo = find_exe_seg_last_section(ctx);
+    if (sinfo == NULL) {
+        rv = false;
         goto done;
+    }
 
-    /* Display sections that are valid targets for injection */
-    display_injectable(sinfo);
+    printf("  -- %s\n", sinfo->name);
+    printf("    -- offset      : 0x%08x\n", *sinfo->offset);
+    printf("    -- size        : 0x%08x\n", *sinfo->size);
 
     /* If we're just analyzing, bail out */
     if (analyze)
         goto done;
 
     /* Expand the section by name */
-    rv = expand_section_by_name(ctx, sinfo, ".text", &pinfo);
+    rv = expand_section(ctx, sinfo, &pinfo);
     if (rv == false)
         goto done;
 
@@ -125,7 +106,7 @@ int main(int argc, char **argv)
     /* Cleanup */
 done:
     if (sinfo)
-        free_slackinfo_list(sinfo);
+        free(sinfo);
     unload_elf(ctx);
     return (rv == false);
 }

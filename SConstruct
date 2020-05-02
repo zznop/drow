@@ -3,7 +3,6 @@ base_env = Environment(
     CFLAGS=['-W', '-Wall', '-O2'],
 )
 
-
 drow = base_env.SConscript(
     './SConscript',
     variant_dir='$BUILD_DIR',
