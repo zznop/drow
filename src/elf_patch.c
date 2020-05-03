@@ -8,7 +8,7 @@
 #include "elf_patch.h"
 #include "drow.h"
 
-bool expand_section(drow_ctx_t *ctx, struct shinfo *sinfo, struct patchinfo *pinfo)
+bool expand_section(elf_t *elfinfo, struct shinfo *sinfo, struct patchinfo *pinfo)
 {
     Elf64_Ehdr *ehdr;
     size_t adjust;
@@ -17,7 +17,7 @@ bool expand_section(drow_ctx_t *ctx, struct shinfo *sinfo, struct patchinfo *pin
     Elf64_Shdr *shtable;
     size_t i;
 
-    ehdr = (Elf64_Ehdr *)ctx->elf;
+    ehdr = (Elf64_Ehdr *)elfinfo->elf;
 
     /* Set patch information */
     size = *sinfo->size;
@@ -30,7 +30,7 @@ bool expand_section(drow_ctx_t *ctx, struct shinfo *sinfo, struct patchinfo *pin
     adjust = getpagesize();
 
     printf(INFO "Adjusting Section Header offsets ...\n");
-    shtable = (Elf64_Shdr *)((uintptr_t)ctx->elf + ehdr->e_shoff);
+    shtable = (Elf64_Shdr *)((uintptr_t)elfinfo->elf + ehdr->e_shoff);
     for (i = 0; i < ehdr->e_shnum; i++) {
         if (shtable[i].sh_offset < pinfo->base)
             continue;
@@ -39,7 +39,7 @@ bool expand_section(drow_ctx_t *ctx, struct shinfo *sinfo, struct patchinfo *pin
     }
 
     printf(INFO "Adjusting Program Header offsets ...\n");
-    Elf64_Phdr *phdr = (Elf64_Phdr *)((uintptr_t)ctx->elf + ehdr->e_phoff);
+    Elf64_Phdr *phdr = (Elf64_Phdr *)((uintptr_t)elfinfo->elf + ehdr->e_phoff);
     for (i = 0; i < ehdr->e_phnum; i++) {
         if (phdr[i].p_offset > pinfo->base) {
             phdr[i].p_offset = phdr[i].p_offset + pinfo->size;
@@ -61,7 +61,7 @@ bool expand_section(drow_ctx_t *ctx, struct shinfo *sinfo, struct patchinfo *pin
     return true;
 }
 
-struct shinfo *find_exe_seg_last_section(drow_ctx_t *ctx)
+struct shinfo *find_exe_seg_last_section(elf_t *elfinfo)
 {
     Elf64_Ehdr *ehdr;
     Elf64_Phdr *phdr;
@@ -71,10 +71,10 @@ struct shinfo *find_exe_seg_last_section(drow_ctx_t *ctx)
     struct shinfo *sinfo = NULL;
     size_t i, j;
 
-    ehdr = (Elf64_Ehdr *)ctx->elf;
-    phdr = (Elf64_Phdr *)((uintptr_t)ctx->elf + ehdr->e_phoff);
-    shtable = (Elf64_Shdr *)((uintptr_t)ctx->elf + ehdr->e_shoff);
-    shstr = (char *)((uintptr_t)ctx->elf + shtable[ehdr->e_shstrndx].sh_offset);
+    ehdr = (Elf64_Ehdr *)elfinfo->elf;
+    phdr = (Elf64_Phdr *)((uintptr_t)elfinfo->elf + ehdr->e_phoff);
+    shtable = (Elf64_Shdr *)((uintptr_t)elfinfo->elf + ehdr->e_shoff);
+    shstr = (char *)((uintptr_t)elfinfo->elf + shtable[ehdr->e_shstrndx].sh_offset);
 
     for (i = 0; i < ehdr->e_phnum; i++) {
         if (phdr[i].p_flags & PF_X) {

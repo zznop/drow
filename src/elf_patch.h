@@ -17,19 +17,19 @@ struct shinfo {
 /**
  * Fixup ELF header to expand a section size
  *
- * @param ctx Drow context
+ * @param elfinfo ELF information struct
  * @param sinfo Slack information linked list
  * @param pinfo Output patch information
  * @return true for success, false for failure
  */
-bool expand_section(drow_ctx_t *ctx, struct shinfo *sinfo, struct patchinfo *pinfo);
+bool expand_section(elf_t *elfinfo, struct shinfo *sinfo, struct patchinfo *pinfo);
 
 /**
  * Locate last section in executable segment
  *
- * @param ctx Drow context
+ * @param elfinfo ELF information struct
  * @return shinfo structure containing information on section to be expanded, or NULL on failure
  */
-struct shinfo *find_exe_seg_last_section(drow_ctx_t *ctx);
+struct shinfo *find_exe_seg_last_section(elf_t *elfinfo);
 
 #endif

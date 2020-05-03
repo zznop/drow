@@ -9,16 +9,16 @@ typedef struct {
     int fd;
     uint8_t *data;
     size_t size;
-} payload_t;
+} patch_t;
 
 /**
- * Load a target ELF file and initialize the drow context
+ * Load a target ELF file and initialize the elfinfo struct
  *
- * @param ctx Uninitialized pointer to drow context pointer
+ * @param elfinfo Uninitialized pointer to output elfinfo struct
  * @param elffile File path to target ELF file
  * @return true for success, false for failure
  */
-bool load_elf(drow_ctx_t **ctx, const char *elffile);
+bool load_elf(elf_t **elfinfo, const char *elffile);
 
 /**
  * Map in payload blob
@@ -26,24 +26,24 @@ bool load_elf(drow_ctx_t **ctx, const char *elffile);
  * @param payload Output payload structure
  * @param patchfile Path to payload blob
  */
-bool load_payload(payload_t **payload, const char *patchfile);
+bool load_patch(patch_t **patch, const char *patchfile);
 
 /**
  * Unload ELF from drow and cleanup memory
  *
- * @param ctx Drow context
+ * @param elfinfo ELF information struct
  */
-void unload_elf(drow_ctx_t *ctx);
+void unload_elf(elf_t *elfinfo);
 
 /**
  * Export fixed up ELF file
  *
- * @param ctx Drow context
+ * @param elfinfo ELF information struct
  * @param payload Payload file structure
  * @param outfile Path to output file
  * @param pinfo Patch information
  * @return true for success, false for failure
  */
-bool export_elf_file(drow_ctx_t *ctx, payload_t *payload, char *outfile, struct patchinfo *pinfo);
+bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patchinfo *pinfo);
 
 #endif

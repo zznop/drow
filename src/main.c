@@ -20,7 +20,7 @@ static void print_help(void)
 {
     printf(
         "[v0.0.1]\n" // TODO: Use preprocessor/git describe version
-        "drow [options] infile payload outfile\n"
+        "drow [options] infile patchfile outfile\n"
         "options:\n"
         "  -h    display usage\n"
     );
@@ -31,21 +31,21 @@ static bool patch_elf(char *infile, char *patchfile, char *outfile)
     bool rv;
     struct shinfo *sinfo = NULL;
     struct patchinfo pinfo = {0};
-    payload_t *payload;
-    drow_ctx_t *ctx;
+    patch_t *patch;
+    elf_t *elfinfo;
 
     /* Map in the ELF */
-    rv = load_elf(&ctx, infile);
+    rv = load_elf(&elfinfo, infile);
     if (rv == false)
         return 1;
 
-    /* Map in payload */
-    rv = load_payload(&payload, patchfile);
+    /* Map in patch */
+    rv = load_patch(&patch, patchfile);
     if (rv == false)
         goto done;
 
     printf(INFO "Finding last section in executable segment ...\n");
-    sinfo = find_exe_seg_last_section(ctx);
+    sinfo = find_exe_seg_last_section(elfinfo);
     if (sinfo == NULL) {
         rv = false;
         fprintf(stderr, ERR "Failed to find last section in executable segment!?\n");
@@ -54,12 +54,12 @@ static bool patch_elf(char *infile, char *patchfile, char *outfile)
     printf(SUCCESS "Found %s at 0x%08x with a size of %u bytes\n", sinfo->name, *sinfo->offset, *sinfo->size);
 
     /* Expand the section */
-    rv = expand_section(ctx, sinfo, &pinfo);
+    rv = expand_section(elfinfo, sinfo, &pinfo);
     if (rv == false)
         goto done;
 
     /* Write out new ELF file */
-    rv = export_elf_file(ctx, payload, outfile, &pinfo);
+    rv = export_elf_file(elfinfo, patch, outfile, &pinfo);
     if (rv == true)
         printf(SUCCESS "ELF patched successfully!\n");
     else
@@ -69,8 +69,8 @@ static bool patch_elf(char *infile, char *patchfile, char *outfile)
 done:
     if (sinfo)
         free(sinfo);
-    if (ctx)
-        unload_elf(ctx);
+    if (elfinfo)
+        unload_elf(elfinfo);
     return (rv == false);
 
 }
@@ -123,7 +123,7 @@ int main(int argc, char **argv)
     }
 
     if (patchfile == NULL) {
-        fprintf(stderr, "no payload file\n");
+        fprintf(stderr, "no patch file\n");
         return 1;
     }
 
