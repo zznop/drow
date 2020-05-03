@@ -47,7 +47,7 @@ bool load_elf(drow_ctx_t **ctx, const char *elffile)
 
     *ctx = (drow_ctx_t *)malloc(sizeof(drow_ctx_t));
     if (!*ctx) {
-        fprintf(stderr, ERR "Failed to allocate memory for drow context");
+        fprintf(stderr, ERR "Failed to allocate memory for drow context\n");
         goto error;
     }
 
@@ -59,7 +59,52 @@ error:
     free(*ctx);
     if (elf)
         munmap(elf, size);
-    if (fd == -1)
+    if (fd != -1)
+        close(fd);
+    return false;
+}
+
+bool load_payload(payload_t **payload, const char *payload_file)
+{
+    int size;
+    int fd;
+    void *data = NULL;
+
+    *payload = NULL;
+    printf(INFO "Loading payload blob: %s\n", payload_file);
+    size = _get_file_size(payload_file);
+    if (size < 0) {
+        fprintf(stderr, ERR "Failed to get payload file size\n");
+        return false;
+    }
+
+    fd = open(payload_file, O_RDONLY);
+    if (fd == -1) {
+        fprintf(stderr, ERR "Failed to open payload\n");
+        return false;
+    }
+
+    data = (uint8_t *)mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (!data) {
+        fprintf(stderr, ERR "Failed to map payload\n");
+        goto error;
+    }
+
+    *payload = (payload_t *)malloc(sizeof(payload_t));
+    if (!*payload) {
+        fprintf(stderr, ERR "Failed to allocate memory for payload\n");
+        goto error;
+    }
+
+    (*payload)->fd = fd;
+    (*payload)->data = data;
+    (*payload)->size = size;
+    return true;
+error:
+    free(*payload);
+    if (data)
+        munmap(data, size);
+    if (fd != -1)
         close(fd);
     return false;
 }
@@ -97,7 +142,7 @@ bool expand_section(drow_ctx_t *ctx, struct shinfo *sinfo, struct patchinfo *pin
     *sinfo->size = size + sinfo->slackspace;
     adjust = getpagesize();
 
-    printf(INFO "Fixing Section Header offsets ...\n");
+    printf(INFO "Adjusting Section Header offsets ...\n");
     shtable = (Elf64_Shdr *)((uintptr_t)ctx->elf + ehdr->e_shoff);
     for (i = 0; i < ehdr->e_shnum; i++) {
         if (shtable[i].sh_offset < pinfo->base)
@@ -106,7 +151,7 @@ bool expand_section(drow_ctx_t *ctx, struct shinfo *sinfo, struct patchinfo *pin
         shtable[i].sh_offset = newoff;
     }
 
-    printf(INFO "Fixing Program Header offsets ...\n");
+    printf(INFO "Adjusting Program Header offsets ...\n");
     Elf64_Phdr *phdr = (Elf64_Phdr *)((uintptr_t)ctx->elf + ehdr->e_phoff);
     for (i = 0; i < ehdr->e_phnum; i++) {
         if (phdr[i].p_offset > pinfo->base) {
@@ -119,7 +164,7 @@ bool expand_section(drow_ctx_t *ctx, struct shinfo *sinfo, struct patchinfo *pin
         }
     }
 
-    printf(INFO "Fixing ELF header offsets ...\n");
+    printf(INFO "Adjusting ELF header offsets ...\n");
     if (ehdr->e_shoff > pinfo->base)
         ehdr->e_shoff = ehdr->e_shoff + pinfo->size;
 
@@ -129,54 +174,66 @@ bool expand_section(drow_ctx_t *ctx, struct shinfo *sinfo, struct patchinfo *pin
     return true;
 }
 
-bool export_elf_file(drow_ctx_t *ctx, char *outfile, struct patchinfo *pinfo)
+bool export_elf_file(drow_ctx_t *ctx, payload_t *payload, char *outfile, struct patchinfo *pinfo)
 {
     int fd;
     int n;
-    char *patch;
+    char *pad = NULL;
+    size_t padsize;
     size_t remaining;
     bool rv = false;
 
+    printf(INFO "Exporting patched ELF to %s ...\n", outfile);
     fd = open(outfile, O_RDWR|O_CREAT|O_TRUNC, 0777);
     if (fd == -1) {
         fprintf(stderr, ERR "Failed to create patched ELF\n");
         return false;
     }
 
-    /* Write ELF data up until where we are writing our patch */
+    printf(INFO "Writing first part of ELF (size: %u)\n", pinfo->base);
     n = write(fd, ctx->elf, pinfo->base);
     if ((uint32_t)n != pinfo->base) {
-        fprintf(stderr, ERR "Failed to export ELF (write)\n");
+        fprintf(stderr, ERR "Failed to export ELF (write 1st ELF chunk)\n");
         goto done;
     }
 
-    /* Allocate patch buffer */
-    patch = (char *)malloc(pinfo->size);
-    if (patch == NULL) {
-        fprintf(stderr, ERR "Out of memory?\n");
+    printf(INFO "Writing payload (size: %lu)\n", payload->size);
+    n = write(fd, payload->data, payload->size);
+    if ((size_t)n != payload->size) {
+        fprintf(stderr, ERR "Failed to export ELF (write payload)\n");
         goto done;
     }
-    memset(patch, 'A', pinfo->size);
 
-    /* TODO: write payload to patch */
+    /* Allocate buffer for pad */
+    padsize = pinfo->size - payload->size;
+    pad = (char *)malloc(padsize);
+    if (pad == NULL) {
+        fprintf(stderr, ERR "Failed to export ELF (out of memory?)\n");
+        goto done;
+    }
+    memset(pad, 0, padsize);
 
-    /* Write patch to file */
-    n = write(fd, patch, pinfo->size);
-    if ((size_t)n != pinfo->size) {
-        fprintf(stderr, ERR "Failed to export ELF (write patch)\n");
+    printf(INFO "Writing pad to maintain page alignment (size: %lu)\n", padsize);
+    n = write(fd, pad, padsize);
+    if ((size_t)n != padsize) {
+        fprintf(stderr, ERR "Failed to export ELF (write pad)\n");
         goto done;
     }
 
     /* Write rest of the ELF */
     remaining = ctx->size - pinfo->base;
-    n = write(fd, ctx->elf + pinfo->base, remaining);
-    if ((size_t)n != remaining) {
-        fprintf(stderr, ERR "Failed to export ELF (write remaining)\n");
-        goto done;
+    if (remaining) {
+        printf(INFO "Writing remaining data (size: %lu)\n", remaining);
+        n = write(fd, ctx->elf + pinfo->base, remaining);
+        if ((size_t)n != remaining) {
+            fprintf(stderr, ERR "Failed to export ELF (write remaining)\n");
+            goto done;
+        }
     }
 
     rv = true;
 done:
+    free(pad);
     close(fd);
     return rv;
 }
@@ -198,6 +255,7 @@ struct shinfo *find_exe_seg_last_section(drow_ctx_t *ctx)
 
     for (i = 0; i < ehdr->e_phnum; i++) {
         if (phdr[i].p_flags & PF_X) {
+            printf(SUCCESS "Found executable segment at 0x%08lx (size:%08lx)\n", phdr[i].p_offset, phdr[i].p_memsz);
             /* Found the executable segment, now find the last section in the segment */
             segment_end = phdr[i].p_vaddr + phdr[i].p_memsz;
             for (j = 0; j < ehdr->e_shnum; j++) {
@@ -214,7 +272,6 @@ struct shinfo *find_exe_seg_last_section(drow_ctx_t *ctx)
                     sinfo->slackspace = getpagesize();
                 }
             }
-            break;
         }
     }
     return sinfo;
