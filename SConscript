@@ -1,8 +1,9 @@
 Import('env')
 
 sources = [
+    './src/drowio.c',
+    './src/elf_patch.c',
     './src/main.c',
-    './src/elfio.c',
 ]
 
 objs = env.Object(

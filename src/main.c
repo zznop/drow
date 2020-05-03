@@ -2,7 +2,8 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <getopt.h>
-#include "elfio.h"
+#include "drowio.h"
+#include "elf_patch.h"
 #include "drow.h"
 
 static void print_banner(void)
@@ -25,74 +26,13 @@ static void print_help(void)
     );
 }
 
-int main(int argc, char **argv)
+static bool patch_elf(char *infile, char *patchfile, char *outfile)
 {
-    int opt;
-    char *infile = NULL;
-    char *outfile = NULL;
-    bool verbose = false;
     bool rv;
     struct shinfo *sinfo = NULL;
     struct patchinfo pinfo = {0};
-    char *payload_file = NULL;
-    int i = 1;
     payload_t *payload;
     drow_ctx_t *ctx;
-
-    if (argc < 3) {
-        print_help();
-        return 0;
-    }
-
-    while (i < argc) {
-        if ((opt = getopt(argc, argv, "hv")) != -1) {
-            switch (opt) {
-            case 'h':
-                print_help();
-                return 0;
-            case 'v':
-                verbose = true;
-                (void)verbose;
-                break;
-            default:
-                print_help();
-                return 1;
-            }
-        } else {
-            switch (i) {
-            case 1:
-                infile = argv[i];
-                break;
-            case 2:
-                payload_file = argv[i];
-                break;
-            case 3:
-                outfile = argv[i];
-                break;
-            default:
-                print_help();
-                return 1;
-            }
-            i++;
-        }
-    }
-
-    if (infile == NULL) {
-        fprintf(stderr, "no input ELF file\n");
-        return 1;
-    }
-
-    if (payload_file == NULL) {
-        fprintf(stderr, "no payload file\n");
-        return 1;
-    }
-
-    if (outfile == NULL) {
-        fprintf(stderr, "no out ELF file path\n");
-        return 1;
-    }
-
-    print_banner();
 
     /* Map in the ELF */
     rv = load_elf(&ctx, infile);
@@ -100,7 +40,7 @@ int main(int argc, char **argv)
         return 1;
 
     /* Map in payload */
-    rv = load_payload(&payload, payload_file);
+    rv = load_payload(&payload, patchfile);
     if (rv == false)
         goto done;
 
@@ -113,7 +53,7 @@ int main(int argc, char **argv)
     }
     printf(SUCCESS "Found %s at 0x%08x with a size of %u bytes\n", sinfo->name, *sinfo->offset, *sinfo->size);
 
-    /* Expand the section by name */
+    /* Expand the section */
     rv = expand_section(ctx, sinfo, &pinfo);
     if (rv == false)
         goto done;
@@ -132,4 +72,66 @@ done:
     if (ctx)
         unload_elf(ctx);
     return (rv == false);
+
+}
+
+int main(int argc, char **argv)
+{
+    int opt;
+    char *patchfile = NULL;
+    char *infile = NULL;
+    char *outfile = NULL;
+    int i = 1;
+
+    if (argc < 3) {
+        print_help();
+        return 0;
+    }
+
+    while (i < argc) {
+        if ((opt = getopt(argc, argv, "hv")) != -1) {
+            switch (opt) {
+            case 'h':
+                print_help();
+                return 0;
+            default:
+                print_help();
+                return 1;
+            }
+        } else {
+            switch (i) {
+            case 1:
+                infile = argv[i];
+                break;
+            case 2:
+                patchfile = argv[i];
+                break;
+            case 3:
+                outfile = argv[i];
+                break;
+            default:
+                print_help();
+                return 1;
+            }
+            i++;
+        }
+    }
+
+    if (infile == NULL) {
+        fprintf(stderr, "no input ELF file\n");
+        return 1;
+    }
+
+    if (patchfile == NULL) {
+        fprintf(stderr, "no payload file\n");
+        return 1;
+    }
+
+    if (outfile == NULL) {
+        fprintf(stderr, "no out ELF file path\n");
+        return 1;
+    }
+
+    print_banner();
+    return patch_elf(infile, patchfile, outfile);
 }
