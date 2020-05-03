@@ -12,6 +12,12 @@ typedef struct {
     void *elf;
 } drow_ctx_t;
 
+typedef struct {
+    int fd;
+    uint8_t *data;
+    size_t size;
+} payload_t;
+
 
 struct shinfo {
     char name[MAX_SH_NAMELEN];
@@ -35,6 +41,14 @@ struct patchinfo {
 bool load_elf(drow_ctx_t **ctx, const char *elffile);
 
 /**
+ * Map in payload blob
+ *
+ * @param payload Output payload structure
+ * @param payload_file Path to payload blob
+ */
+bool load_payload(payload_t **payload, const char *payload_file);
+
+/**
  * Unload ELF from drow and cleanup memory
  *
  * @param ctx Drow context
@@ -55,11 +69,12 @@ bool expand_section(drow_ctx_t *ctx, struct shinfo *sinfo, struct patchinfo *pin
  * Export fixed up ELF file
  *
  * @param ctx Drow context
+ * @param payload Payload file structure
  * @param outfile Path to output file
  * @param pinfo Patch information
  * @return true for success, false for failure
  */
-bool export_elf_file(drow_ctx_t *ctx, char *outfile, struct patchinfo *pinfo);
+bool export_elf_file(drow_ctx_t *ctx, payload_t *payload, char *outfile, struct patchinfo *pinfo);
 
 /**
  * Locate last section in executable segment
