@@ -19,14 +19,14 @@ static int _get_file_size(const char *filepath)
     return st.st_size;
 }
 
-bool load_elf(drow_ctx_t **ctx, const char *elffile)
+bool load_elf(elf_t **elfinfo, const char *elffile)
 {
     int size;
     int fd;
     void *elf = NULL;
 
     printf(INFO "Loading ELF file: %s\n", elffile);
-    *ctx = NULL;
+    *elfinfo = NULL;
     size = _get_file_size(elffile);
     if (size < 0) {
         fprintf(stderr, ERR "Failed to get ELF file size\n");
@@ -45,18 +45,18 @@ bool load_elf(drow_ctx_t **ctx, const char *elffile)
         goto error;
     }
 
-    *ctx = (drow_ctx_t *)malloc(sizeof(drow_ctx_t));
-    if (!*ctx) {
-        fprintf(stderr, ERR "Failed to allocate memory for drow context\n");
+    *elfinfo = (elf_t *)malloc(sizeof(elf_t));
+    if (!*elfinfo) {
+        fprintf(stderr, ERR "Failed to allocate memory for ELF information");
         goto error;
     }
 
-    (*ctx)->fd = fd;
-    (*ctx)->size = size;
-    (*ctx)->elf = elf;
+    (*elfinfo)->fd = fd;
+    (*elfinfo)->size = size;
+    (*elfinfo)->elf = elf;
     return true;
 error:
-    free(*ctx);
+    free(*elfinfo);
     if (elf)
         munmap(elf, size);
     if (fd != -1)
@@ -64,44 +64,44 @@ error:
     return false;
 }
 
-bool load_payload(payload_t **payload, const char *patchfile)
+bool load_patch(patch_t **patch, const char *patchfile)
 {
     int size;
     int fd;
     void *data = NULL;
 
-    *payload = NULL;
-    printf(INFO "Loading payload blob: %s\n", patchfile);
+    *patch = NULL;
+    printf(INFO "Loading patch file: %s\n", patchfile);
     size = _get_file_size(patchfile);
     if (size < 0) {
-        fprintf(stderr, ERR "Failed to get payload file size\n");
+        fprintf(stderr, ERR "Failed to get patch file size\n");
         return false;
     }
 
     fd = open(patchfile, O_RDONLY);
     if (fd == -1) {
-        fprintf(stderr, ERR "Failed to open payload\n");
+        fprintf(stderr, ERR "Failed to open patch file\n");
         return false;
     }
 
     data = (uint8_t *)mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (!data) {
-        fprintf(stderr, ERR "Failed to map payload\n");
+        fprintf(stderr, ERR "Failed to map patch file\n");
         goto error;
     }
 
-    *payload = (payload_t *)malloc(sizeof(payload_t));
-    if (!*payload) {
-        fprintf(stderr, ERR "Failed to allocate memory for payload\n");
+    *patch = (patch_t *)malloc(sizeof(patch_t));
+    if (!*patch) {
+        fprintf(stderr, ERR "Failed to allocate memory for patch\n");
         goto error;
     }
 
-    (*payload)->fd = fd;
-    (*payload)->data = data;
-    (*payload)->size = size;
+    (*patch)->fd = fd;
+    (*patch)->data = data;
+    (*patch)->size = size;
     return true;
 error:
-    free(*payload);
+    free(*patch);
     if (data)
         munmap(data, size);
     if (fd != -1)
@@ -109,19 +109,19 @@ error:
     return false;
 }
 
-void unload_elf(drow_ctx_t *ctx)
+void unload_elf(elf_t *elfinfo)
 {
-    if (!ctx)
+    if (!elfinfo)
         return;
 
-    if (ctx->elf)
-        munmap(ctx->elf, ctx->size);
+    if (elfinfo->elf)
+        munmap(elfinfo->elf, elfinfo->size);
 
-    if (ctx->fd != -1)
-        close(ctx->fd);
+    if (elfinfo->fd != -1)
+        close(elfinfo->fd);
 }
 
-bool export_elf_file(drow_ctx_t *ctx, payload_t *payload, char *outfile, struct patchinfo *pinfo)
+bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patchinfo *pinfo)
 {
     int fd;
     int n;
@@ -138,21 +138,21 @@ bool export_elf_file(drow_ctx_t *ctx, payload_t *payload, char *outfile, struct 
     }
 
     printf(INFO "Writing first part of ELF (size: %u)\n", pinfo->base);
-    n = write(fd, ctx->elf, pinfo->base);
+    n = write(fd, elfinfo->elf, pinfo->base);
     if ((uint32_t)n != pinfo->base) {
         fprintf(stderr, ERR "Failed to export ELF (write 1st ELF chunk)\n");
         goto done;
     }
 
-    printf(INFO "Writing payload (size: %lu)\n", payload->size);
-    n = write(fd, payload->data, payload->size);
-    if ((size_t)n != payload->size) {
-        fprintf(stderr, ERR "Failed to export ELF (write payload)\n");
+    printf(INFO "Writing patch (size: %lu)\n", patch->size);
+    n = write(fd, patch->data, patch->size);
+    if ((size_t)n != patch->size) {
+        fprintf(stderr, ERR "Failed to export ELF (write patch)\n");
         goto done;
     }
 
     /* Allocate buffer for pad */
-    padsize = pinfo->size - payload->size;
+    padsize = pinfo->size - patch->size;
     pad = (char *)malloc(padsize);
     if (pad == NULL) {
         fprintf(stderr, ERR "Failed to export ELF (out of memory?)\n");
@@ -168,10 +168,10 @@ bool export_elf_file(drow_ctx_t *ctx, payload_t *payload, char *outfile, struct 
     }
 
     /* Write rest of the ELF */
-    remaining = ctx->size - pinfo->base;
+    remaining = elfinfo->size - pinfo->base;
     if (remaining) {
         printf(INFO "Writing remaining data (size: %lu)\n", remaining);
-        n = write(fd, ctx->elf + pinfo->base, remaining);
+        n = write(fd, elfinfo->elf + pinfo->base, remaining);
         if ((size_t)n != remaining) {
             fprintf(stderr, ERR "Failed to export ELF (write remaining)\n");
             goto done;

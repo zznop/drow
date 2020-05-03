@@ -5,7 +5,7 @@ typedef struct {
     int fd;
     int size;
     void *elf;
-} drow_ctx_t;
+} elf_t;
 
 struct patchinfo {
     uint32_t base;
