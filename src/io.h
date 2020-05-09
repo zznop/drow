@@ -39,11 +39,12 @@ void unload_elf(elf_t *elfinfo);
  * Export fixed up ELF file
  *
  * @param elfinfo ELF information struct
- * @param payload Payload file structure
+ * @param patch Patch information structure
  * @param outfile Path to output file
  * @param pinfo Patch information
+ * @param old_entry Old e_entry before it was overwritten to point to the payload
  * @return true for success, false for failure
  */
-bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patchinfo *pinfo);
+bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patchinfo *pinfo, uint32_t old_entry);
 
 #endif

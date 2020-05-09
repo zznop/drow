@@ -1,10 +1,6 @@
 .global g_stager
-.global g_stager_size
+.global g_stager_end
 
 g_stager:
     .incbin "build/stager.bin"
-stager_end:
-
-g_stager_size:
-    .long stager_end - g_stager
-
+g_stager_end:
