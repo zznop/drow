@@ -31,6 +31,7 @@ static bool patch_elf(char *infile, char *patchfile, char *outfile)
     bool rv;
     struct shinfo *sinfo = NULL;
     struct patchinfo pinfo = {0};
+    uint32_t old_entry;
     patch_t *patch;
     elf_t *elfinfo;
 
@@ -59,10 +60,10 @@ static bool patch_elf(char *infile, char *patchfile, char *outfile)
         goto done;
 
     /* Overwrite ELF header e_entry to make the patch the entry */
-    patch_entry(elfinfo, &pinfo);
+    patch_entry(elfinfo, &pinfo, &old_entry);
 
     /* Write out new ELF file */
-    rv = export_elf_file(elfinfo, patch, outfile, &pinfo);
+    rv = export_elf_file(elfinfo, patch, outfile, &pinfo, old_entry);
     if (rv == true)
         printf(SUCCESS "ELF patched successfully!\n");
     else

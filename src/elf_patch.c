@@ -93,6 +93,7 @@ struct shinfo *find_exe_seg_last_section(elf_t *elfinfo)
                     sinfo->offset     = (uint32_t *)&shtable[j].sh_offset;
                     sinfo->size       = (uint32_t *)&shtable[j].sh_size;
                     sinfo->expand_size = getpagesize();
+                    break;
                 }
             }
         }
@@ -100,10 +101,11 @@ struct shinfo *find_exe_seg_last_section(elf_t *elfinfo)
     return sinfo;
 }
 
-void patch_entry(elf_t *elfinfo, struct patchinfo *pinfo)
+void patch_entry(elf_t *elfinfo, struct patchinfo *pinfo, uint32_t *old_entry)
 {
     Elf64_Ehdr *ehdr;
     printf(INFO "Modifying ELF e_entry to point to the patch at 0x%08x ...\n", pinfo->base);
     ehdr = (Elf64_Ehdr *)elfinfo->elf;
+    *old_entry = ehdr->e_entry;
     ehdr->e_entry = (uint32_t)pinfo->base;
 }

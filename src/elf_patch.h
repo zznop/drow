@@ -37,7 +37,8 @@ struct shinfo *find_exe_seg_last_section(elf_t *elfinfo);
  *
  * @param elfinfo ELF informations struct
  * @param pinfo Patch information struct
+ * @param old_entry Pointer to output original e_entry offset
  */
-void patch_entry(elf_t *elfinfo, struct patchinfo *pinfo);
+void patch_entry(elf_t *elfinfo, struct patchinfo *pinfo, uint32_t *old_entry);
 
 #endif

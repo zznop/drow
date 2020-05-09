@@ -11,6 +11,9 @@
 #include "elf_patch.h"
 #include "drow.h"
 
+extern uint8_t *g_stager;
+extern uint8_t *g_stager_end;
+
 static int _get_file_size(const char *filepath)
 {
     struct stat st;
@@ -121,7 +124,7 @@ void unload_elf(elf_t *elfinfo)
         close(elfinfo->fd);
 }
 
-bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patchinfo *pinfo)
+bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patchinfo *pinfo, uint32_t old_entry)
 {
     int fd;
     int n;
@@ -129,6 +132,8 @@ bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patch
     size_t padsize;
     size_t remaining;
     bool rv = false;
+    uint8_t *stager_buf;
+    uint32_t stager_size;
 
     printf(INFO "Exporting patched ELF to %s ...\n", outfile);
     fd = open(outfile, O_RDWR|O_CREAT|O_TRUNC, 0777);
@@ -144,7 +149,26 @@ bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patch
         goto done;
     }
 
-    printf(INFO "Writing patch (size: %lu)\n", patch->size);
+    stager_size = (uintptr_t)&g_stager_end - (uintptr_t)&g_stager;
+    stager_buf = (uint8_t *)malloc(stager_size);
+    if (!stager_buf) {
+        fprintf(stderr, ERR "Failed to allocate memory for the stager buffer\n");
+        goto done;
+    }
+    memcpy(stager_buf, &g_stager, stager_size);
+
+    printf(INFO "Setting old and new e_entry values in stager ...\n");
+    *(uint32_t *)(stager_buf + 2) = old_entry;
+    *(uint32_t *)(stager_buf + 6) = pinfo->base;
+
+    printf(INFO "Writing stager stub (size: %u) ...\n", stager_size);
+    n = write(fd, stager_buf, stager_size);
+    if ((size_t)n != stager_size) {
+        fprintf(stderr, ERR "Failed to export ELF (stager write)\n");
+        goto done;
+    }
+
+    printf(INFO "Writing patch/payload (size: %lu)\n", patch->size);
     n = write(fd, patch->data, patch->size);
     if ((size_t)n != patch->size) {
         fprintf(stderr, ERR "Failed to export ELF (write patch)\n");
@@ -152,7 +176,7 @@ bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patch
     }
 
     /* Allocate buffer for pad */
-    padsize = pinfo->size - patch->size;
+    padsize = pinfo->size - patch->size - stager_size;
     pad = (char *)malloc(padsize);
     if (pad == NULL) {
         fprintf(stderr, ERR "Failed to export ELF (out of memory?)\n");
