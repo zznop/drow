@@ -99,3 +99,11 @@ struct shinfo *find_exe_seg_last_section(elf_t *elfinfo)
     }
     return sinfo;
 }
+
+void patch_entry(elf_t *elfinfo, struct patchinfo *pinfo)
+{
+    Elf64_Ehdr *ehdr;
+    printf(INFO "Modifying ELF e_entry to point to the patch at 0x%08x ...\n", pinfo->base);
+    ehdr = (Elf64_Ehdr *)elfinfo->elf;
+    ehdr->e_entry = (uint32_t)pinfo->base;
+}

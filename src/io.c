@@ -7,7 +7,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <stdbool.h>
-#include "drowio.h"
+#include "io.h"
 #include "elf_patch.h"
 #include "drow.h"
 

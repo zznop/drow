@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <getopt.h>
-#include "drowio.h"
+#include "io.h"
 #include "elf_patch.h"
 #include "drow.h"
 
@@ -57,6 +57,9 @@ static bool patch_elf(char *infile, char *patchfile, char *outfile)
     rv = expand_section(elfinfo, sinfo, &pinfo);
     if (rv == false)
         goto done;
+
+    /* Overwrite ELF header e_entry to make the patch the entry */
+    patch_entry(elfinfo, &pinfo);
 
     /* Write out new ELF file */
     rv = export_elf_file(elfinfo, patch, outfile, &pinfo);
