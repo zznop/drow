@@ -8,60 +8,62 @@
 #include "elf_patch.h"
 #include "drow.h"
 
-bool expand_section(elf_t *elfinfo, struct shinfo *sinfo, struct patchinfo *pinfo)
+#define PAGE_SIZE 0x1000
+#define ALIGN_PAGE(val) ((PAGE_SIZE-1) & val) ? ((val + PAGE_SIZE) & ~(PAGE_SIZE -1)) : val
+
+bool expand_section(fmap_t *elf, struct shinfo *sinfo, struct tgt_info *tinfo, size_t patch_size)
 {
     Elf64_Ehdr *ehdr;
-    size_t adjust;
     size_t size;
     uint32_t newoff;
     Elf64_Shdr *shtable;
     size_t i;
+    size_t patch_size_aligned = (ALIGN_PAGE(patch_size)) + PAGE_SIZE;
 
-    ehdr = (Elf64_Ehdr *)elfinfo->elf;
+    ehdr = (Elf64_Ehdr *)elf->data;
 
     /* Set patch information */
     size = *sinfo->size;
-    pinfo->base = *sinfo->offset + size;
-    pinfo->size = getpagesize();
+    tinfo->base = *sinfo->offset + size;
+    tinfo->size = patch_size_aligned;
 
     /* Fix up size */
-    printf(INFO "Expanding %s size by %lu bytes...\n", sinfo->name, pinfo->size);
-    *sinfo->size = size + sinfo->expand_size;
-    adjust = getpagesize();
+    printf(INFO "Expanding %s size by %lu bytes...\n", sinfo->name, tinfo->size);
+    *sinfo->size = size + patch_size_aligned;
 
     printf(INFO "Adjusting Section Header offsets ...\n");
-    shtable = (Elf64_Shdr *)((uintptr_t)elfinfo->elf + ehdr->e_shoff);
+    shtable = (Elf64_Shdr *)((uintptr_t)elf->data + ehdr->e_shoff);
     for (i = 0; i < ehdr->e_shnum; i++) {
-        if (shtable[i].sh_offset < pinfo->base)
+        if (shtable[i].sh_offset < tinfo->base)
             continue;
-        newoff = shtable[i].sh_offset + adjust;
+        newoff = shtable[i].sh_offset + patch_size_aligned;
         shtable[i].sh_offset = newoff;
     }
 
     printf(INFO "Adjusting Program Header offsets ...\n");
-    Elf64_Phdr *phdr = (Elf64_Phdr *)((uintptr_t)elfinfo->elf + ehdr->e_phoff);
+    Elf64_Phdr *phdr = (Elf64_Phdr *)((uintptr_t)elf->data + ehdr->e_phoff);
     for (i = 0; i < ehdr->e_phnum; i++) {
-        if (phdr[i].p_offset > pinfo->base) {
-            phdr[i].p_offset = phdr[i].p_offset + pinfo->size;
+        if (phdr[i].p_offset > tinfo->base) {
+            phdr[i].p_offset = phdr[i].p_offset + tinfo->size;
         }
 
         if (phdr[i].p_flags & PF_X) {
-            phdr[i].p_filesz += pinfo->size;
-            phdr[i].p_memsz += pinfo->size;
+            phdr[i].p_filesz += tinfo->size;
+            phdr[i].p_memsz += tinfo->size;
         }
     }
 
     printf(INFO "Adjusting ELF header offsets ...\n");
-    if (ehdr->e_shoff > pinfo->base)
-        ehdr->e_shoff = ehdr->e_shoff + pinfo->size;
+    if (ehdr->e_shoff > tinfo->base)
+        ehdr->e_shoff = ehdr->e_shoff + tinfo->size;
 
-    if (ehdr->e_phoff > pinfo->base)
-        ehdr->e_phoff = ehdr->e_phoff + pinfo->size;
+    if (ehdr->e_phoff > tinfo->base)
+        ehdr->e_phoff = ehdr->e_phoff + tinfo->size;
 
     return true;
 }
 
-struct shinfo *find_exe_seg_last_section(elf_t *elfinfo)
+struct shinfo *find_exe_seg_last_section(fmap_t *elf)
 {
     Elf64_Ehdr *ehdr;
     Elf64_Phdr *phdr;
@@ -71,10 +73,10 @@ struct shinfo *find_exe_seg_last_section(elf_t *elfinfo)
     struct shinfo *sinfo = NULL;
     size_t i, j;
 
-    ehdr = (Elf64_Ehdr *)elfinfo->elf;
-    phdr = (Elf64_Phdr *)((uintptr_t)elfinfo->elf + ehdr->e_phoff);
-    shtable = (Elf64_Shdr *)((uintptr_t)elfinfo->elf + ehdr->e_shoff);
-    shstr = (char *)((uintptr_t)elfinfo->elf + shtable[ehdr->e_shstrndx].sh_offset);
+    ehdr = (Elf64_Ehdr *)elf->data;
+    phdr = (Elf64_Phdr *)((uintptr_t)elf->data + ehdr->e_phoff);
+    shtable = (Elf64_Shdr *)((uintptr_t)elf->data + ehdr->e_shoff);
+    shstr = (char *)((uintptr_t)elf->data + shtable[ehdr->e_shstrndx].sh_offset);
 
     for (i = 0; i < ehdr->e_phnum; i++) {
         if (phdr[i].p_flags & PF_X) {
@@ -92,7 +94,6 @@ struct shinfo *find_exe_seg_last_section(elf_t *elfinfo)
                     strncpy(sinfo->name, shstr+shtable[j].sh_name, MAX_SH_NAMELEN);
                     sinfo->offset     = (uint32_t *)&shtable[j].sh_offset;
                     sinfo->size       = (uint32_t *)&shtable[j].sh_size;
-                    sinfo->expand_size = getpagesize();
                     break;
                 }
             }
@@ -101,11 +102,11 @@ struct shinfo *find_exe_seg_last_section(elf_t *elfinfo)
     return sinfo;
 }
 
-void patch_entry(elf_t *elfinfo, struct patchinfo *pinfo, uint32_t *old_entry)
+void patch_entry(fmap_t *elf, struct tgt_info *tinfo, uint32_t *old_entry)
 {
     Elf64_Ehdr *ehdr;
-    printf(INFO "Modifying ELF e_entry to point to the patch at 0x%08x ...\n", pinfo->base);
-    ehdr = (Elf64_Ehdr *)elfinfo->elf;
+    printf(INFO "Modifying ELF e_entry to point to the patch at 0x%08x ...\n", tinfo->base);
+    ehdr = (Elf64_Ehdr *)elf->data;
     *old_entry = ehdr->e_entry;
-    ehdr->e_entry = (uint32_t)pinfo->base;
+    ehdr->e_entry = (uint32_t)tinfo->base;
 }

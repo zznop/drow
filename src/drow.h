@@ -4,10 +4,10 @@
 typedef struct {
     int fd;
     int size;
-    void *elf;
-} elf_t;
+    uint8_t *data;
+} fmap_t;
 
-struct patchinfo {
+struct tgt_info {
     uint32_t base;
     size_t size;
 };

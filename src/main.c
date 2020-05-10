@@ -19,34 +19,34 @@ static void print_banner(void)
 static void print_help(void)
 {
     printf(
-        "[v0.0.1]\n" // TODO: Use preprocessor/git describe version
+        "[v0.0.1]\n"
         "drow [options] infile patchfile outfile\n"
         "options:\n"
         "  -h    display usage\n"
     );
 }
 
-static bool patch_elf(char *infile, char *patchfile, char *outfile)
+static bool do_work(char *infile, char *patchfile, char *outfile)
 {
     bool rv;
     struct shinfo *sinfo = NULL;
-    struct patchinfo pinfo = {0};
+    struct tgt_info tinfo = {0};
     uint32_t old_entry;
-    patch_t *patch;
-    elf_t *elfinfo;
+    fmap_t *patch;
+    fmap_t *elf;
 
     /* Map in the ELF */
-    rv = load_elf(&elfinfo, infile);
+    rv = load_fmap(&elf, infile);
     if (rv == false)
         return 1;
 
     /* Map in patch */
-    rv = load_patch(&patch, patchfile);
+    rv = load_fmap(&patch, patchfile);
     if (rv == false)
         goto done;
 
     printf(INFO "Finding last section in executable segment ...\n");
-    sinfo = find_exe_seg_last_section(elfinfo);
+    sinfo = find_exe_seg_last_section(elf);
     if (sinfo == NULL) {
         rv = false;
         fprintf(stderr, ERR "Failed to find last section in executable segment!?\n");
@@ -55,15 +55,15 @@ static bool patch_elf(char *infile, char *patchfile, char *outfile)
     printf(SUCCESS "Found %s at 0x%08x with a size of %u bytes\n", sinfo->name, *sinfo->offset, *sinfo->size);
 
     /* Expand the section */
-    rv = expand_section(elfinfo, sinfo, &pinfo);
+    rv = expand_section(elf, sinfo, &tinfo, patch->size);
     if (rv == false)
         goto done;
 
     /* Overwrite ELF header e_entry to make the patch the entry */
-    patch_entry(elfinfo, &pinfo, &old_entry);
+    patch_entry(elf, &tinfo, &old_entry);
 
     /* Write out new ELF file */
-    rv = export_elf_file(elfinfo, patch, outfile, &pinfo, old_entry);
+    rv = export_elf_file(elf, patch, outfile, &tinfo, old_entry);
     if (rv == true)
         printf(SUCCESS "ELF patched successfully!\n");
     else
@@ -71,12 +71,10 @@ static bool patch_elf(char *infile, char *patchfile, char *outfile)
 
     /* Cleanup */
 done:
-    if (sinfo)
-        free(sinfo);
-    if (elfinfo)
-        unload_elf(elfinfo);
+    free(sinfo);
+    unload_fmap(elf);
+    unload_fmap(patch);
     return (rv == false);
-
 }
 
 int main(int argc, char **argv)
@@ -137,5 +135,5 @@ int main(int argc, char **argv)
     }
 
     print_banner();
-    return patch_elf(infile, patchfile, outfile);
+    return do_work(infile, patchfile, outfile);
 }

@@ -22,89 +22,44 @@ static int _get_file_size(const char *filepath)
     return st.st_size;
 }
 
-bool load_elf(elf_t **elfinfo, const char *elffile)
-{
-    int size;
-    int fd;
-    void *elf = NULL;
-
-    printf(INFO "Loading ELF file: %s\n", elffile);
-    *elfinfo = NULL;
-    size = _get_file_size(elffile);
-    if (size < 0) {
-        fprintf(stderr, ERR "Failed to get ELF file size\n");
-        return false;
-    }
-
-    fd = open(elffile, O_RDONLY);
-    if (fd == -1) {
-        fprintf(stderr, ERR "Failed to open ELF file\n");
-        return false;
-    }
-
-    elf = (void *)mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE, fd, 0);
-    if (!elf) {
-        fprintf(stderr, ERR "Failed to map ELF file\n");
-        goto error;
-    }
-
-    *elfinfo = (elf_t *)malloc(sizeof(elf_t));
-    if (!*elfinfo) {
-        fprintf(stderr, ERR "Failed to allocate memory for ELF information");
-        goto error;
-    }
-
-    (*elfinfo)->fd = fd;
-    (*elfinfo)->size = size;
-    (*elfinfo)->elf = elf;
-    return true;
-error:
-    free(*elfinfo);
-    if (elf)
-        munmap(elf, size);
-    if (fd != -1)
-        close(fd);
-    return false;
-}
-
-bool load_patch(patch_t **patch, const char *patchfile)
+bool load_fmap(fmap_t **file, const char *filename)
 {
     int size;
     int fd;
     void *data = NULL;
 
-    *patch = NULL;
-    printf(INFO "Loading patch file: %s\n", patchfile);
-    size = _get_file_size(patchfile);
+    printf(INFO "Mapping file: %s\n", filename);
+    *file = NULL;
+    size = _get_file_size(filename);
     if (size < 0) {
-        fprintf(stderr, ERR "Failed to get patch file size\n");
+        fprintf(stderr, ERR "Failed to get file size\n");
         return false;
     }
 
-    fd = open(patchfile, O_RDONLY);
+    fd = open(filename, O_RDONLY);
     if (fd == -1) {
-        fprintf(stderr, ERR "Failed to open patch file\n");
+        fprintf(stderr, ERR "Failed to open file\n");
         return false;
     }
 
-    data = (uint8_t *)mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    data = (void *)mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_PRIVATE, fd, 0);
     if (!data) {
-        fprintf(stderr, ERR "Failed to map patch file\n");
+        fprintf(stderr, ERR "Failed to map file\n");
         goto error;
     }
 
-    *patch = (patch_t *)malloc(sizeof(patch_t));
-    if (!*patch) {
-        fprintf(stderr, ERR "Failed to allocate memory for patch\n");
+    *file = (fmap_t *)malloc(sizeof(fmap_t));
+    if (!*file) {
+        fprintf(stderr, ERR "Failed to allocate memory for file mapping");
         goto error;
     }
 
-    (*patch)->fd = fd;
-    (*patch)->data = data;
-    (*patch)->size = size;
+    (*file)->fd = fd;
+    (*file)->size = size;
+    (*file)->data = data;
     return true;
 error:
-    free(*patch);
+    free(*file);
     if (data)
         munmap(data, size);
     if (fd != -1)
@@ -112,19 +67,19 @@ error:
     return false;
 }
 
-void unload_elf(elf_t *elfinfo)
+void unload_fmap(fmap_t *file)
 {
-    if (!elfinfo)
+    if (!file)
         return;
 
-    if (elfinfo->elf)
-        munmap(elfinfo->elf, elfinfo->size);
-
-    if (elfinfo->fd != -1)
-        close(elfinfo->fd);
+    if (file->data)
+        munmap(file->data, file->size);
+    if (file->fd != -1)
+        close(file->fd);
+    free(file);
 }
 
-bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patchinfo *pinfo, uint32_t old_entry)
+bool export_elf_file(fmap_t *elf, fmap_t *patch, char *outfile, struct tgt_info *tinfo, uint32_t old_entry)
 {
     int fd;
     int n;
@@ -132,7 +87,7 @@ bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patch
     size_t padsize;
     size_t remaining;
     bool rv = false;
-    uint8_t *stager_buf;
+    uint8_t *stager_buf = NULL;
     uint32_t stager_size;
 
     printf(INFO "Exporting patched ELF to %s ...\n", outfile);
@@ -142,9 +97,9 @@ bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patch
         return false;
     }
 
-    printf(INFO "Writing first part of ELF (size: %u)\n", pinfo->base);
-    n = write(fd, elfinfo->elf, pinfo->base);
-    if ((uint32_t)n != pinfo->base) {
+    printf(INFO "Writing first part of ELF (size: %u)\n", tinfo->base);
+    n = write(fd, elf->data, tinfo->base);
+    if ((uint32_t)n != tinfo->base) {
         fprintf(stderr, ERR "Failed to export ELF (write 1st ELF chunk)\n");
         goto done;
     }
@@ -159,7 +114,7 @@ bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patch
 
     printf(INFO "Setting old and new e_entry values in stager ...\n");
     *(uint32_t *)(stager_buf + 2) = old_entry;
-    *(uint32_t *)(stager_buf + 6) = pinfo->base;
+    *(uint32_t *)(stager_buf + 6) = tinfo->base;
 
     printf(INFO "Writing stager stub (size: %u) ...\n", stager_size);
     n = write(fd, stager_buf, stager_size);
@@ -168,15 +123,15 @@ bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patch
         goto done;
     }
 
-    printf(INFO "Writing patch/payload (size: %lu)\n", patch->size);
+    printf(INFO "Writing patch/payload (size: %u)\n", patch->size);
     n = write(fd, patch->data, patch->size);
-    if ((size_t)n != patch->size) {
+    if (n != patch->size) {
         fprintf(stderr, ERR "Failed to export ELF (write patch)\n");
         goto done;
     }
 
     /* Allocate buffer for pad */
-    padsize = pinfo->size - patch->size - stager_size;
+    padsize = tinfo->size - patch->size - stager_size;
     pad = (char *)malloc(padsize);
     if (pad == NULL) {
         fprintf(stderr, ERR "Failed to export ELF (out of memory?)\n");
@@ -192,10 +147,10 @@ bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patch
     }
 
     /* Write rest of the ELF */
-    remaining = elfinfo->size - pinfo->base;
+    remaining = elf->size - tinfo->base;
     if (remaining) {
         printf(INFO "Writing remaining data (size: %lu)\n", remaining);
-        n = write(fd, elfinfo->elf + pinfo->base, remaining);
+        n = write(fd, elf->data + tinfo->base, remaining);
         if ((size_t)n != remaining) {
             fprintf(stderr, ERR "Failed to export ELF (write remaining)\n");
             goto done;
@@ -204,6 +159,7 @@ bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patch
 
     rv = true;
 done:
+    free(stager_buf);
     free(pad);
     close(fd);
     return rv;
