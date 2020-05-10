@@ -5,46 +5,32 @@
 #include <stdint.h>
 #include "drow.h"
 
-typedef struct {
-    int fd;
-    uint8_t *data;
-    size_t size;
-} patch_t;
-
 /**
- * Load a target ELF file and initialize the elfinfo struct
+ * Map in a file and return a populated file mapping structure
  *
- * @param elfinfo Uninitialized pointer to output elfinfo struct
- * @param elffile File path to target ELF file
+ * @param file Uninitialized pointer to output file mapping structure
+ * @param filename Path to file
  * @return true for success, false for failure
  */
-bool load_elf(elf_t **elfinfo, const char *elffile);
+bool load_fmap(fmap_t **file, const char *filename);
 
 /**
- * Map in payload blob
+ * Unload file mapping and cleanup memory
  *
- * @param payload Output payload structure
- * @param patchfile Path to payload blob
+ * @param file File mapping structure
  */
-bool load_patch(patch_t **patch, const char *patchfile);
-
-/**
- * Unload ELF from drow and cleanup memory
- *
- * @param elfinfo ELF information struct
- */
-void unload_elf(elf_t *elfinfo);
+void unload_fmap(fmap_t *file);
 
 /**
  * Export fixed up ELF file
  *
- * @param elfinfo ELF information struct
- * @param patch Patch information structure
+ * @param elf ELF information struct
+ * @param patch Mapped patch file information
  * @param outfile Path to output file
- * @param pinfo Patch information
+ * @param tinfo Information on patch placement and size
  * @param old_entry Old e_entry before it was overwritten to point to the payload
  * @return true for success, false for failure
  */
-bool export_elf_file(elf_t *elfinfo, patch_t *patch, char *outfile, struct patchinfo *pinfo, uint32_t old_entry);
+bool export_elf_file(fmap_t *elf, fmap_t *patch, char *outfile, struct tgt_info *tinfo, uint32_t old_entry);
 
 #endif

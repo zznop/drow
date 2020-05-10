@@ -1,0 +1,7 @@
+language: c
+os: linux
+compiler: gcc
+before_script:
+  - sudo apt-get -y install scons
+script:
+  - scons -j 8
