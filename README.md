@@ -6,14 +6,14 @@
 
 ### TL;DR
 drow is a command-line utility that is used to inject code and hook the entrypoint of ELF executables (post-build). It
-takes unmodified ELF executables as input and exports a modified ELF contianing an embedded user-supplied payload that
+takes unmodified ELF executables as input and exports a modified ELF containing an embedded user-supplied payload that
 executes at runtime.
 
 ### Slightly more detail ...
 
 Drow takes the following steps to create the new patched ELF:
 
-1. Map in the umodified target ELF executable and the user-supplied payload, a position-independent blob
+1. Map in the unmodified target ELF executable and the user-supplied payload, a position-independent blob
 2. Locate the first executable segment by parsing program headers
 3. Locate the last section in the executable segment by parsing section headers
 4. Expand the last section (in the segment) section header's `sh_size` and program header's `p_memsz`/`p_filesz` by
@@ -35,7 +35,7 @@ Install `gcc` and `scons`. Then run `scons` from the root of the directory.
 ## Other Information
 
 In addition to building drow, this project also builds a Linux x86-64 payload named `rappers_delight.bin` that simply
-prints to `stdout`. This can be used for testing. Currently, drow only works with ELF64 files targetting x86-64.
+prints to `stdout`. This can be used for testing. Currently, drow only works with ELF64 files targeting x86-64.
 
 ## Other Work
 
