@@ -9,7 +9,8 @@
 #include "drow.h"
 
 #define PAGE_SIZE 0x1000
-#define ALIGN_PAGE(val) ((PAGE_SIZE-1) & val) ? ((val + PAGE_SIZE) & ~(PAGE_SIZE -1)) : val
+
+#define ALIGN_PAGE(val) (val & ~(PAGE_SIZE -1))
 
 bool expand_section(fmap_t *elf, struct shinfo *sinfo, struct tgt_info *tinfo, size_t patch_size)
 {
@@ -91,14 +92,27 @@ struct shinfo *find_exe_seg_last_section(fmap_t *elf)
                         return NULL;
                     }
 
-                    strncpy(sinfo->name, shstr+shtable[j].sh_name, MAX_SH_NAMELEN);
+                    strncpy(sinfo->name, shstr+shtable[j].sh_name, MAX_SH_NAMELEN-1);
                     sinfo->offset     = (uint32_t *)&shtable[j].sh_offset;
                     sinfo->size       = (uint32_t *)&shtable[j].sh_size;
                     break;
                 }
+
+                if (j+1 == ehdr->e_shnum) {
+                    printf(INFO "RX segment is last segment in binary. You can inject any sized payload!\n");
+                    goto out;
+                }
+
+                if ((shtable[j].sh_addr + PAGE_SIZE) > shtable[j+1].sh_addr) {
+                    printf(ERR "RX segment is not injectable. Must contain "
+                        "atleast 4096 bytes of slack space before next segment mapping\n");
+                    return NULL;
+                }
             }
         }
     }
+    printf(ERR "RX segment not found!?\n");
+out:
     return sinfo;
 }
 

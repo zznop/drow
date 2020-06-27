@@ -49,7 +49,6 @@ static bool do_work(char *infile, char *patchfile, char *outfile)
     sinfo = find_exe_seg_last_section(elf);
     if (sinfo == NULL) {
         rv = false;
-        fprintf(stderr, ERR "Failed to find last section in executable segment!?\n");
         goto done;
     }
     printf(SUCCESS "Found %s at 0x%08x with a size of %u bytes\n", sinfo->name, *sinfo->offset, *sinfo->size);
