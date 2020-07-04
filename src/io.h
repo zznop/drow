@@ -29,8 +29,9 @@ void unload_fmap(fmap_t *file);
  * @param outfile Path to output file
  * @param tinfo Information on patch placement and size
  * @param old_entry Old e_entry before it was overwritten to point to the payload
+ * @param inject_method Injection method enum
  * @return true for success, false for failure
  */
-bool export_elf_file(fmap_t *elf, fmap_t *patch, char *outfile, struct tgt_info *tinfo, uint32_t old_entry);
+bool export_elf_file(fmap_t *elf, fmap_t *patch, char *outfile, struct tgt_info *tinfo, uint32_t old_entry, int inject_method);
 
 #endif
