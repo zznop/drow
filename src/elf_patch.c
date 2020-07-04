@@ -134,7 +134,7 @@ struct shinfo *find_exe_seg_last_section(fmap_t *elf, size_t patch_size)
         /* Check if there's enough space to expand the segment */
         if ((shtable[j].sh_addr + PAGE_SIZE) > shtable[j+1].sh_addr) {
             sinfo->inject_method = METHOD_EXPAND_AND_INJECT;
-            printf(ERR "RX segment is not injectable.\n");
+            printf(ERR "RX segment can not accomodate payload of size %lu bytes (not enough space)\n", patch_size);
             return NULL;
         }
     }
