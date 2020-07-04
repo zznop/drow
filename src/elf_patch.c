@@ -9,7 +9,10 @@
 #include "drow.h"
 
 #define PAGE_SIZE 0x1000
-#define ALIGN_PAGE(val) ((PAGE_SIZE-1) & val) ? ((val + PAGE_SIZE) & ~(PAGE_SIZE -1)) : val
+#define ALIGN_PAGE(val) (val & ~(PAGE_SIZE -1))
+
+extern uint8_t *g_stager;
+extern uint8_t *g_stager_end;
 
 bool expand_section(fmap_t *elf, struct shinfo *sinfo, struct tgt_info *tinfo, size_t patch_size)
 {
@@ -18,52 +21,63 @@ bool expand_section(fmap_t *elf, struct shinfo *sinfo, struct tgt_info *tinfo, s
     uint32_t newoff;
     Elf64_Shdr *shtable;
     size_t i;
-    size_t patch_size_aligned = (ALIGN_PAGE(patch_size)) + PAGE_SIZE;
+    uint32_t stager_size;
+
+    stager_size = (uintptr_t)&g_stager_end - (uintptr_t)&g_stager;
+    if (sinfo->inject_method == METHOD_EXPAND_AND_INJECT)
+        patch_size = (ALIGN_PAGE(patch_size)) + PAGE_SIZE;
 
     ehdr = (Elf64_Ehdr *)elf->data;
 
     /* Set patch information */
     size = *sinfo->size;
     tinfo->base = *sinfo->offset + size;
-    tinfo->size = patch_size_aligned;
+    tinfo->size = patch_size;
 
     /* Fix up size */
-    printf(INFO "Expanding %s size by %lu bytes...\n", sinfo->name, tinfo->size);
-    *sinfo->size = size + patch_size_aligned;
+    printf(INFO "Expanding %s size by %lu bytes...\n", sinfo->name, patch_size+stager_size);
+    *sinfo->size = size + patch_size + stager_size;
 
-    printf(INFO "Adjusting Section Header offsets ...\n");
-    shtable = (Elf64_Shdr *)((uintptr_t)elf->data + ehdr->e_shoff);
-    for (i = 0; i < ehdr->e_shnum; i++) {
-        if (shtable[i].sh_offset < tinfo->base)
-            continue;
-        newoff = shtable[i].sh_offset + patch_size_aligned;
-        shtable[i].sh_offset = newoff;
+    /* Only adjust section header offsets if we're expanding the segment past the page boundary */
+    if (sinfo->inject_method == METHOD_EXPAND_AND_INJECT) {
+        printf(INFO "Adjusting Section Header offsets ...\n");
+        shtable = (Elf64_Shdr *)((uintptr_t)elf->data + ehdr->e_shoff);
+        for (i = 0; i < ehdr->e_shnum; i++) {
+            if (shtable[i].sh_offset < tinfo->base)
+                continue;
+            newoff = shtable[i].sh_offset + patch_size + stager_size;
+            shtable[i].sh_offset = newoff;
+        }
     }
 
-    printf(INFO "Adjusting Program Header offsets ...\n");
     Elf64_Phdr *phdr = (Elf64_Phdr *)((uintptr_t)elf->data + ehdr->e_phoff);
+    printf(INFO "Adjusting Program Headers ...\n");
     for (i = 0; i < ehdr->e_phnum; i++) {
-        if (phdr[i].p_offset > tinfo->base) {
-            phdr[i].p_offset = phdr[i].p_offset + tinfo->size;
+        /* Only adjust program header offsets if we're expanding the segment past the page boundary */
+        if (sinfo->inject_method == METHOD_EXPAND_AND_INJECT) {
+            if (phdr[i].p_offset > tinfo->base) {
+                phdr[i].p_offset = phdr[i].p_offset + patch_size + stager_size;
+            }
         }
 
         if (phdr[i].p_flags & PF_X) {
-            phdr[i].p_filesz += tinfo->size;
-            phdr[i].p_memsz += tinfo->size;
+            printf(INFO "Adjusting RX segment program header size ...\n");
+            phdr[i].p_filesz += patch_size + stager_size;
+            phdr[i].p_memsz += patch_size + stager_size;
         }
     }
 
     printf(INFO "Adjusting ELF header offsets ...\n");
     if (ehdr->e_shoff > tinfo->base)
-        ehdr->e_shoff = ehdr->e_shoff + tinfo->size;
+        ehdr->e_shoff = ehdr->e_shoff + patch_size + stager_size;
 
     if (ehdr->e_phoff > tinfo->base)
-        ehdr->e_phoff = ehdr->e_phoff + tinfo->size;
+        ehdr->e_phoff = ehdr->e_phoff + patch_size + stager_size;
 
     return true;
 }
 
-struct shinfo *find_exe_seg_last_section(fmap_t *elf)
+struct shinfo *find_exe_seg_last_section(fmap_t *elf, size_t patch_size)
 {
     Elf64_Ehdr *ehdr;
     Elf64_Phdr *phdr;
@@ -72,6 +86,7 @@ struct shinfo *find_exe_seg_last_section(fmap_t *elf)
     uint32_t segment_end;
     struct shinfo *sinfo = NULL;
     size_t i, j;
+    uint32_t stager_size;
 
     ehdr = (Elf64_Ehdr *)elf->data;
     phdr = (Elf64_Phdr *)((uintptr_t)elf->data + ehdr->e_phoff);
@@ -79,26 +94,52 @@ struct shinfo *find_exe_seg_last_section(fmap_t *elf)
     shstr = (char *)((uintptr_t)elf->data + shtable[ehdr->e_shstrndx].sh_offset);
 
     for (i = 0; i < ehdr->e_phnum; i++) {
-        if (phdr[i].p_flags & PF_X) {
-            printf(SUCCESS "Found executable segment at 0x%08lx (size:%08lx)\n", phdr[i].p_offset, phdr[i].p_memsz);
-            /* Found the executable segment, now find the last section in the segment */
-            segment_end = phdr[i].p_vaddr + phdr[i].p_memsz;
-            for (j = 0; j < ehdr->e_shnum; j++) {
-                if (shtable[j].sh_addr + shtable[j].sh_size == segment_end) {
-                    sinfo = (struct shinfo *)malloc(sizeof(*sinfo));
-                    if (!sinfo) {
-                        fprintf(stderr, ERR "Out of memory!?");
-                        return NULL;
-                    }
+        if (!(phdr[i].p_flags & PF_X))
+            continue;
 
-                    strncpy(sinfo->name, shstr+shtable[j].sh_name, MAX_SH_NAMELEN);
-                    sinfo->offset     = (uint32_t *)&shtable[j].sh_offset;
-                    sinfo->size       = (uint32_t *)&shtable[j].sh_size;
-                    break;
+        printf(SUCCESS "Found executable segment at 0x%08lx (size:%08lx)\n", phdr[i].p_offset, phdr[i].p_memsz);
+        /* Found the executable segment, now find the last section in the segment */
+        segment_end = phdr[i].p_vaddr + phdr[i].p_memsz;
+        for (j = 0; j < ehdr->e_shnum; j++) {
+            if (shtable[j].sh_addr + shtable[j].sh_size == segment_end) {
+                sinfo = (struct shinfo *)malloc(sizeof(*sinfo));
+                if (!sinfo) {
+                    fprintf(stderr, ERR "Out of memory!?");
+                    return NULL;
                 }
+
+                strncpy(sinfo->name, shstr+shtable[j].sh_name, MAX_SH_NAMELEN-1);
+                sinfo->offset     = (uint32_t *)&shtable[j].sh_offset;
+                sinfo->size       = (uint32_t *)&shtable[j].sh_size;
+                break;
             }
         }
+        printf(SUCCESS "Found %s at 0x%08x with a size of %u bytes\n", sinfo->name, *sinfo->offset, *sinfo->size);
+
+        /* Check if the payload is able to fit without expanding the segment past the next page boundary */
+        stager_size = (uintptr_t)&g_stager_end - (uintptr_t)&g_stager;
+        if (shtable[j+1].sh_addr - shtable[j].sh_addr+shtable[j].sh_size >= patch_size+stager_size) {
+            printf(INFO "Payload can fit on last page of RX segment\n");
+            sinfo->inject_method = METHOD_LAST_PAGE_INJECT;
+            goto out;
+        }
+
+        /* Check if it's the last segment in the binary */
+        if (j+1 == ehdr->e_shnum) {
+            sinfo->inject_method = METHOD_EXPAND_AND_INJECT;
+            printf(INFO "RX segment is last segment in binary. You can inject any sized payload!\n");
+            goto out;
+        }
+
+        /* Check if there's enough space to expand the segment */
+        if ((shtable[j].sh_addr + PAGE_SIZE) > shtable[j+1].sh_addr) {
+            sinfo->inject_method = METHOD_EXPAND_AND_INJECT;
+            printf(ERR "RX segment can not accomodate payload of size %lu bytes (not enough space)\n", patch_size);
+            return NULL;
+        }
     }
+    printf(ERR "RX segment not found!?\n");
+out:
     return sinfo;
 }
 

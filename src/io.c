@@ -79,7 +79,7 @@ void unload_fmap(fmap_t *file)
     free(file);
 }
 
-bool export_elf_file(fmap_t *elf, fmap_t *patch, char *outfile, struct tgt_info *tinfo, uint32_t old_entry)
+bool export_elf_file(fmap_t *elf, fmap_t *patch, char *outfile, struct tgt_info *tinfo, uint32_t old_entry, int inject_method)
 {
     int fd;
     int n;
@@ -131,32 +131,42 @@ bool export_elf_file(fmap_t *elf, fmap_t *patch, char *outfile, struct tgt_info 
     }
 
     /* Allocate buffer for pad */
-    padsize = tinfo->size - patch->size - stager_size;
-    pad = (char *)malloc(padsize);
-    if (pad == NULL) {
-        fprintf(stderr, ERR "Failed to export ELF (out of memory?)\n");
-        goto done;
-    }
-    memset(pad, 0, padsize);
+    if (inject_method == METHOD_EXPAND_AND_INJECT) {
+        padsize = tinfo->size - patch->size - stager_size;
+        pad = (char *)malloc(padsize);
+        if (pad == NULL) {
+            fprintf(stderr, ERR "Failed to export ELF (out of memory?)\n");
+            goto done;
+        }
+        memset(pad, 0, padsize);
 
-    printf(INFO "Writing pad to maintain page alignment (size: %lu)\n", padsize);
-    n = write(fd, pad, padsize);
-    if ((size_t)n != padsize) {
-        fprintf(stderr, ERR "Failed to export ELF (write pad)\n");
+        printf(INFO "Writing pad to maintain page alignment (size: %lu)\n", padsize);
+        n = write(fd, pad, padsize);
+        if ((size_t)n != padsize) {
+            fprintf(stderr, ERR "Failed to export ELF (write pad)\n");
+            goto done;
+        }
+        remaining = elf->size - tinfo->base;
+    } else {
+        remaining = elf->size - tinfo->base - (stager_size + tinfo->size);
+    }
+
+    if (!remaining) {
+        rv = true;
         goto done;
     }
 
     /* Write rest of the ELF */
-    remaining = elf->size - tinfo->base;
-    if (remaining) {
-        printf(INFO "Writing remaining data (size: %lu)\n", remaining);
+    printf(INFO "Writing remaining data (size: %lu)\n", remaining);
+    if (inject_method == METHOD_EXPAND_AND_INJECT)
         n = write(fd, elf->data + tinfo->base, remaining);
-        if ((size_t)n != remaining) {
-            fprintf(stderr, ERR "Failed to export ELF (write remaining)\n");
-            goto done;
-        }
-    }
+    else
+        n = write(fd, elf->data+tinfo->base+stager_size+tinfo->size, remaining);
 
+    if ((size_t)n != remaining) {
+        fprintf(stderr, ERR "Failed to export ELF (write remaining)\n");
+        goto done;
+    }
     rv = true;
 done:
     free(stager_buf);

@@ -7,10 +7,16 @@
 
 #define MAX_SH_NAMELEN 128
 
+enum {
+    METHOD_LAST_PAGE_INJECT = 0,
+    METHOD_EXPAND_AND_INJECT,
+};
+
 struct shinfo {
     char name[MAX_SH_NAMELEN];
     uint32_t *offset;
     uint32_t *size;
+    int inject_method;
 };
 
 /**
@@ -28,9 +34,10 @@ bool expand_section(fmap_t *elf, struct shinfo *sinfo, struct tgt_info *tinfo, s
  * Locate last section in executable segment
  *
  * @param elf ELF information struct
+ * @param patch_size Size of patch/payload
  * @return shinfo structure containing information on section to be expanded, or NULL on failure
  */
-struct shinfo *find_exe_seg_last_section(fmap_t *elf);
+struct shinfo *find_exe_seg_last_section(fmap_t *elf, size_t patch_size);
 
 /**
  * Overwrite ELF e_entry so that it points to the injected patch
