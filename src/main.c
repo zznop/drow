@@ -46,13 +46,11 @@ static bool do_work(char *infile, char *patchfile, char *outfile)
         goto done;
 
     printf(INFO "Finding last section in executable segment ...\n");
-    sinfo = find_exe_seg_last_section(elf);
+    sinfo = find_exe_seg_last_section(elf, patch->size);
     if (sinfo == NULL) {
         rv = false;
-        fprintf(stderr, ERR "Failed to find last section in executable segment!?\n");
         goto done;
     }
-    printf(SUCCESS "Found %s at 0x%08x with a size of %u bytes\n", sinfo->name, *sinfo->offset, *sinfo->size);
 
     /* Expand the section */
     rv = expand_section(elf, sinfo, &tinfo, patch->size);
@@ -63,7 +61,7 @@ static bool do_work(char *infile, char *patchfile, char *outfile)
     patch_entry(elf, &tinfo, &old_entry);
 
     /* Write out new ELF file */
-    rv = export_elf_file(elf, patch, outfile, &tinfo, old_entry);
+    rv = export_elf_file(elf, patch, outfile, &tinfo, old_entry, sinfo->inject_method);
     if (rv == true)
         printf(SUCCESS "ELF patched successfully!\n");
     else
