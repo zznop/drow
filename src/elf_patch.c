@@ -87,6 +87,7 @@ struct shinfo *find_exe_seg_last_section(fmap_t *elf, size_t patch_size)
     struct shinfo *sinfo = NULL;
     size_t i, j;
     uint32_t stager_size;
+    bool found = false;
 
     ehdr = (Elf64_Ehdr *)elf->data;
     phdr = (Elf64_Phdr *)((uintptr_t)elf->data + ehdr->e_phoff);
@@ -99,9 +100,10 @@ struct shinfo *find_exe_seg_last_section(fmap_t *elf, size_t patch_size)
 
         printf(SUCCESS "Found executable segment at 0x%08lx (size:%08lx)\n", phdr[i].p_offset, phdr[i].p_memsz);
         /* Found the executable segment, now find the last section in the segment */
-        segment_end = phdr[i].p_vaddr + phdr[i].p_memsz;
+        segment_end = phdr[i].p_offset + phdr[i].p_memsz;
         for (j = 0; j < ehdr->e_shnum; j++) {
             if (shtable[j].sh_addr + shtable[j].sh_size == segment_end) {
+                found = true;
                 sinfo = (struct shinfo *)malloc(sizeof(*sinfo));
                 if (!sinfo) {
                     fprintf(stderr, ERR "Out of memory!?");
@@ -114,6 +116,12 @@ struct shinfo *find_exe_seg_last_section(fmap_t *elf, size_t patch_size)
                 break;
             }
         }
+
+        if (found == false) {
+            fprintf(stderr, ERR "No sections in segment!? Searching for a new RX segment ...\n");
+            continue;
+        }
+
         printf(SUCCESS "Found %s at 0x%08x with a size of %u bytes\n", sinfo->name, *sinfo->offset, *sinfo->size);
 
         /* Check if the payload is able to fit without expanding the segment past the next page boundary */
