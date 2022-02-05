@@ -1,5 +1,4 @@
-#ifndef _DROW_H
-#define _DROW_H
+#pragma once
 
 typedef struct {
     int fd;
@@ -15,5 +14,3 @@ struct tgt_info {
 #define INFO "\033[0;36m[*]\033[0m "
 #define SUCCESS "\033[0;32m[+]\033[0m "
 #define ERR  "\033[0;31m[!]\033[0m "
-
-#endif

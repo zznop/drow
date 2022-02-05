@@ -1,17 +1,9 @@
 # drow [![Build Status](https://travis-ci.org/zznop/ich.svg?branch=master)](https://travis-ci.org/zznop/drow)
 
-![demo ich](drow.gif)
-
 ## Description
 
-### TL;DR
-drow is a command-line utility that is used to inject code and hook the entrypoint of ELF executables (post-build). It
-takes unmodified ELF executables as input and exports a modified ELF contianing an embedded user-supplied payload that
-executes at runtime.
-
-### Slightly more detail ...
-
-Drow takes the following steps to create the new patched ELF:
+`drow` is a command-line utility that injects code into the entry point of ELF executables (post-build). `drow` takes
+the following steps to inject code into the ELF:
 
 1. Map in the umodified target ELF executable and the user-supplied payload, a position-independent blob
 2. Locate the first executable segment by parsing program headers
@@ -34,13 +26,12 @@ Install `gcc` and `scons`. Then run `scons` from the root of the directory.
 
 ## Other Information
 
-In addition to building drow, this project also builds a Linux x86-64 payload named `rappers_delight.bin` that simply
-prints to `stdout`. This can be used for testing. Currently, drow only works with ELF64 files targetting x86-64.
+In addition to building drow, this project also builds a Linux x86-64 payload named `rappers_delight.bin` that
+prints to `stdout`. This can be used for testing. Currently, drow is only able to inject into x86-64 ELF64 files.
 
 ## Other Work
 
-There has been a lot of open source work done in this domain. I encourage you to also check out the following projects
-and associated publications:
+There has been a lot of open source work done in this domain. Check out the following projects:
 
 * The Cerberus ELF Interface: http://phrack.org/issues/61/8.html
 * The Backdoor Factory: https://github.com/secretsquirrel/the-backdoor-factory

@@ -1,5 +1,4 @@
-#ifndef _ELF_PATCH_H
-#define _ELF_PATCH_H
+#pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -47,5 +46,3 @@ struct shinfo *find_exe_seg_last_section(fmap_t *elf, size_t patch_size);
  * @param old_entry Pointer to output original e_entry offset
  */
 void patch_entry(fmap_t *elf, struct tgt_info *tinfo, uint32_t *old_entry);
-
-#endif
