@@ -5,7 +5,7 @@ stager_obj = env.Object('./src/arch/x86-64/stager.s')
 stager_blob = env.Command(
     'stager.bin',
     stager_obj,
-    'objcopy -O binary --only-section=.text $SOURCE $TARGET'
+    'objcopy -O binary --only-section=.text $SOURCE $TARGET',
 )
 
 # Build rappers delight blob
@@ -13,7 +13,14 @@ rappers_delight_obj = env.Object('./src/arch/x86-64/rappers-delight.s')
 rappers_delight_blob = env.Command(
     'rappers_delight.bin',
     rappers_delight_obj,
-    'objcopy -O binary --only-section=.text $SOURCE $TARGET'
+    'objcopy -O binary --only-section=.text $SOURCE $TARGET',
+)
+
+mem_loader_obj = env.Object('./src/arch/x86-64/mem-loader.s')
+mem_loader_blob = env.Command(
+    'mem_loader.bin',
+    mem_loader_obj,
+    'objcopy -O binary --only-section=.text $SOURCE $TARGET',
 )
 
 # Build drow
