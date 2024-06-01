@@ -126,7 +126,7 @@ struct shinfo *find_exe_seg_last_section(fmap_t *elf, size_t patch_size)
 
         /* Check if the payload is able to fit without expanding the segment past the next page boundary */
         stager_size = (uintptr_t)&g_stager_end - (uintptr_t)&g_stager;
-        if (shtable[j+1].sh_addr - shtable[j].sh_addr+shtable[j].sh_size >= patch_size+stager_size) {
+        if (shtable[j+1].sh_addr - shtable[j].sh_addr - shtable[j].sh_size >= patch_size + stager_size) {
             printf(INFO "Payload can fit on last page of RX segment\n");
             sinfo->inject_method = METHOD_LAST_PAGE_INJECT;
             goto out;
