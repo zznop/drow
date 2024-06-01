@@ -67,12 +67,13 @@ bool expand_section(fmap_t *elf, struct shinfo *sinfo, struct tgt_info *tinfo, s
         }
     }
 
-    printf(INFO "Adjusting ELF header offsets ...\n");
-    if (ehdr->e_shoff > tinfo->base)
-        ehdr->e_shoff = ehdr->e_shoff + patch_size + stager_size;
-
-    if (ehdr->e_phoff > tinfo->base)
-        ehdr->e_phoff = ehdr->e_phoff + patch_size + stager_size;
+    if (sinfo->inject_method == METHOD_EXPAND_AND_INJECT) {
+        printf(INFO "Adjusting ELF header offsets ...\n");
+        if (ehdr->e_shoff > tinfo->base)
+            ehdr->e_shoff = ehdr->e_shoff + patch_size + stager_size;
+        if (ehdr->e_phoff > tinfo->base)
+            ehdr->e_phoff = ehdr->e_phoff + patch_size + stager_size;
+    }
 
     return true;
 }
